@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Tone Adjustment</title>
+    <style>
+      /* Gallery Styles */
+      /* #output-container {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+        gap: 20px;
+        padding: 20px;
+      } */
+
+      div.root-gallery {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+        gap: 20px;
+        padding: 20px;
+      }
+
+      .image-container {
+        border: 1px solid #ddd;
+        border-radius: 8px;
+        overflow: hidden;
+        text-align: center;
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+      }
+
+      .image-title {
+        font-size: 16px;
+        font-weight: bold;
+        padding: 10px;
+        background-color: #f8f8f8;
+        color: #333;
+        border-bottom: 1px solid #ddd;
+      }
+
+      .resized-image {
+        width: 100%; /* Full width of the container */
+        height: auto; /* Maintain aspect ratio */
+        display: block;
+      }
+
+      /* Canvas Styles */
+      #canvas {
+        border: 1px solid #000;
+        margin-top: 20px;
+        max-width: 100%;
+        height: auto;
+      }
+
+      body {
+        font-family: Arial, sans-serif;
+        padding: 20px;
+      }
+
+      button {
+        margin-top: 10px;
+        padding: 10px 20px;
+        font-size: 16px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Tone Adjustment with Otsu Threshold</h1>
+    <input type="file" id="fileInput" accept="image/*" />
+    <div id="output-container"></div>
+
+    <script>
+      const fileInput = document.querySelector('#fileInput')
+
+      function createGroup(id) {
+        const rootDiv = document.createElement('div')
+        rootDiv.id = `root-${id}`
+        rootDiv.innerHTML = `<button>Adjust</button><div class='root-gallery'></div>`
+        document.querySelector('#output-container').appendChild(rootDiv)
+        return rootDiv.id
+      }
+
+      function showCase(rootDivId, dataURL, titleText) {
+        // Create a container div to hold the title and image
+        const container = document.createElement('div')
+        container.classList.add('image-container')
+
+        // Create a title element
+        const title = document.createElement('div')
+        title.classList.add('image-title')
+        title.textContent = titleText
+
+        // Create an image element
+        const img = document.createElement('img')
+        img.src = dataURL
+        img.alt = 'Image'
+        img.classList.add('resized-image')
+
+        // Append the title and image to the container
+        container.appendChild(title)
+        container.appendChild(img)
+
+        // Append the container to the output area
+        const rootDiv = document.getElementById(rootDivId)
+        rootDiv.querySelector('.root-gallery').appendChild(container)
+      }
+
+      function drawImgOnCanvas(img) {
+        const canvas = document.createElement('canvas')
+        // use simple height & width for faster raster
+        canvas.width = img.width //naturalWidth
+        canvas.height = img.height //naturalHeight
+        const ctx = canvas.getContext('2d')
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
+        return canvas
+      }
+
+      function imageDataToDataUrl(imageData) {
+        // Create a canvas element
+        const canvas = document.createElement('canvas')
+        canvas.width = imageData.width
+        canvas.height = imageData.height
+        const ctx = canvas.getContext('2d')
+
+        // Put the ImageData onto the canvas
+        ctx.putImageData(imageData, 0, 0)
+
+        // Convert the canvas to a Data URL
+        const dataURL = canvas.toDataURL('image/png') // You can specify 'image/jpeg' if preferred
+        return dataURL
+      }
+
+      function extractChannels(imageData) {
+        const { data, width, height } = imageData
+        const totalPixels = width * height
+
+        const redChannel = new Uint8Array(totalPixels)
+        const greenChannel = new Uint8Array(totalPixels)
+        const blueChannel = new Uint8Array(totalPixels)
+        const grayChannel = new Uint8Array(totalPixels)
+
+        for (let i = 0; i < totalPixels; i++) {
+          redChannel[i] = data[i * 4] // Red
+          greenChannel[i] = data[i * 4 + 1] // Green
+          blueChannel[i] = data[i * 4 + 2] // Blue
+          let gray = Math.round(
+            0.299 * data[i * 4] +
+              0.587 * data[i * 4 + 1] +
+              0.114 * data[i * 4 + 2]
+          )
+          grayChannel[i] = gray
+        }
+
+        return {
+          redChannel,
+          greenChannel,
+          blueChannel,
+          grayChannel,
+          width,
+          height
+        }
+      }
+
+      function calculateHistogram(channel) {
+        const histogram = new Array(256).fill(0)
+        channel.forEach(value => {
+          histogram[value]++
+        })
+        return histogram
+      }
+
+      function otsuThreshold(histogram, totalPixels) {
+        let sum = histogram.reduce((sum, val, i) => sum + i * val, 0)
+        let sumB = 0
+        let wB = 0
+        let wF = 0
+        let maxVariance = 0
+        let threshold = 0
+
+        for (let t = 0; t < 256; t++) {
+          wB += histogram[t]
+          if (wB === 0) continue
+
+          wF = totalPixels - wB
+          if (wF === 0) break
+
+          sumB += t * histogram[t]
+          const mB = sumB / wB
+          const mF = (sum - sumB) / wF
+
+          const variance = wB * wF * (mB - mF) ** 2
+
+          if (variance > maxVariance) {
+            maxVariance = variance
+            threshold = t
+          }
+        }
+
+        return threshold
+      }
+
+      function applyThreshold(channel, threshold) {
+        return channel.map(value => (value > threshold ? 255 : 0))
+      }
+
+      function combineChannels(
+        thresholdedRed,
+        thresholdedGreen,
+        thresholdedBlue,
+        width,
+        height
+      ) {
+        const output = new Uint8ClampedArray(width * height * 4)
+
+        for (let i = 0; i < width * height; i++) {
+          //   const value = thresholdedRed[i] & thresholdedGreen[i] & thresholdedBlue[i]
+          let value =
+            thresholdedRed[i] + thresholdedGreen[i] + thresholdedBlue[i]
+          value = value >= 510 ? 255 : 0 // like a voting system 510 = 255*2
+          output[i * 4] = value // Red
+          output[i * 4 + 1] = value // Green
+          output[i * 4 + 2] = value // Blue
+          output[i * 4 + 3] = 255 // Alpha
+          //   output[i * 4] = thresholdedRed[i] // Red
+          //   output[i * 4 + 1] = thresholdedGreen[i] // Green
+          //   output[i * 4 + 2] = thresholdedBlue[i] // Blue
+          //   output[i * 4 + 3] = 255 // Alpha
+        }
+        // console.log(output)
+
+        return new ImageData(output, width, height)
+      }
+
+      function adjustImageWithThresholds(
+        imageData,
+        thresholdsGray,
+        thresholdsRGB
+      ) {
+        const { data, width, height } = imageData
+        const output = new Uint8ClampedArray(data.length)
+
+        const deltaR = thresholdsGray - thresholdsRGB.r 
+        const deltaG = thresholdsGray - thresholdsRGB.g
+        const deltaB = thresholdsGray - thresholdsRGB.b
+
+        for (let i = 0; i < data.length; i += 4) {
+          output[i] = Math.min(255, Math.max(0, data[i] + deltaR)) // Adjust Red
+          output[i + 1] = Math.min(255, Math.max(0, data[i + 1] + deltaG)) // Adjust Green
+          output[i + 2] = Math.min(255, Math.max(0, data[i + 2] + deltaB)) // Adjust Blue
+          output[i + 3] = data[i + 3] // Alpha remains unchanged
+        }
+
+        return new ImageData(output, width, height)
+      }
+
+      function colorImage() {
+        const rootDiv = this.parentNode
+        const orgImg = rootDiv.querySelector('img')
+        const canvas = drawImgOnCanvas(orgImg)
+        const ctx = canvas.getContext('2d')
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
+        const {
+          redChannel,
+          greenChannel,
+          blueChannel,
+          grayChannel,
+          width,
+          height
+        } = extractChannels(imageData)
+
+        const grayHistogram = calculateHistogram(grayChannel)
+        const redHistogram = calculateHistogram(redChannel)
+        const greenHistogram = calculateHistogram(greenChannel)
+        const blueHistogram = calculateHistogram(blueChannel)
+
+        const totalPixels = width * height
+
+        const grayThreshold = otsuThreshold(grayHistogram, totalPixels)
+        const redThreshold = otsuThreshold(redHistogram, totalPixels)
+        const greenThreshold = otsuThreshold(greenHistogram, totalPixels)
+        const blueThreshold = otsuThreshold(blueHistogram, totalPixels)
+
+        console.log(
+          `Thresholds: {R:${redThreshold}, G:${greenThreshold}, B:${blueThreshold}}, Gr:${grayThreshold}`
+        )
+
+        // const thresholdedGray = applyThreshold(grayChannel, grayThreshold)
+        // const thresholdedRed = applyThreshold(redChannel, redThreshold)
+        // const thresholdedGreen = applyThreshold(greenChannel, greenThreshold)
+        // const thresholdedBlue = applyThreshold(blueChannel, blueThreshold)
+
+        // const f_image = combineChannels(
+        //   thresholdedRed,
+        //   thresholdedGreen,
+        //   thresholdedBlue,
+        //   width,
+        //   height
+        // )
+
+        const f_image = adjustImageWithThresholds(imageData, grayThreshold, {r:redThreshold, g:greenThreshold, b:blueThreshold})
+
+        showCase(rootDiv.id, imageDataToDataUrl(f_image), 'Adjusted Image')
+      }
+
+      // Event listener to handle file input
+      fileInput.addEventListener('change', event => {
+        const file = event.target.files[0]
+        if (!file) return
+        const reader = new FileReader()
+
+        reader.onload = function (e) {
+          const img = new Image()
+          img.onload = function () {
+            const rootDivId = createGroup(
+              `${file.name.toLowerCase()}-${new Date().getTime()}`
+            )
+            const button = document
+              .getElementById(rootDivId)
+              .querySelector('button')
+            showCase(rootDivId, img.src, 'Original Image')
+            button.addEventListener('click', colorImage)
+          }
+          img.src = e.target.result
+        }
+        reader.readAsDataURL(file)
+      })
+    </script>
+  </body>
+</html>
