@@ -200,7 +200,7 @@
 
       function applyThreshold(channel, threshold) {
         return channel.map(value => (value > threshold ? 255 : 0))
-      }
+      }      
 
       function adjustImageWithThresholds(
         imageData,
@@ -250,8 +250,10 @@
         const redThreshold = otsuThreshold(redHistogram, totalPixels)
         const greenThreshold = otsuThreshold(greenHistogram, totalPixels)
         const blueThreshold = otsuThreshold(blueHistogram, totalPixels)
+
         console.log(
-          `Thresholds: {R:${redThreshold}, G:${greenThreshold}, B:${blueThreshold}}, Gr:${grayThreshold}`        
+          `Thresholds: {R:${redThreshold}, G:${greenThreshold}, B:${blueThreshold}}, Gr:${grayThreshold}`
+        )
         const f_image = adjustImageWithThresholds(imageData, grayThreshold, {r:redThreshold, g:greenThreshold, b:blueThreshold})
         showCase(rootDiv.id, imageDataToDataUrl(f_image), 'Adjusted Image')
       }
