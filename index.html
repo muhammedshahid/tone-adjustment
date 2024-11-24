@@ -202,34 +202,6 @@
         return channel.map(value => (value > threshold ? 255 : 0))
       }
 
-      function combineChannels(
-        thresholdedRed,
-        thresholdedGreen,
-        thresholdedBlue,
-        width,
-        height
-      ) {
-        const output = new Uint8ClampedArray(width * height * 4)
-
-        for (let i = 0; i < width * height; i++) {
-          //   const value = thresholdedRed[i] & thresholdedGreen[i] & thresholdedBlue[i]
-          let value =
-            thresholdedRed[i] + thresholdedGreen[i] + thresholdedBlue[i]
-          value = value >= 510 ? 255 : 0 // like a voting system 510 = 255*2
-          output[i * 4] = value // Red
-          output[i * 4 + 1] = value // Green
-          output[i * 4 + 2] = value // Blue
-          output[i * 4 + 3] = 255 // Alpha
-          //   output[i * 4] = thresholdedRed[i] // Red
-          //   output[i * 4 + 1] = thresholdedGreen[i] // Green
-          //   output[i * 4 + 2] = thresholdedBlue[i] // Blue
-          //   output[i * 4 + 3] = 255 // Alpha
-        }
-        // console.log(output)
-
-        return new ImageData(output, width, height)
-      }
-
       function adjustImageWithThresholds(
         imageData,
         thresholdsGray,
@@ -278,26 +250,9 @@
         const redThreshold = otsuThreshold(redHistogram, totalPixels)
         const greenThreshold = otsuThreshold(greenHistogram, totalPixels)
         const blueThreshold = otsuThreshold(blueHistogram, totalPixels)
-
         console.log(
-          `Thresholds: {R:${redThreshold}, G:${greenThreshold}, B:${blueThreshold}}, Gr:${grayThreshold}`
-        )
-
-        // const thresholdedGray = applyThreshold(grayChannel, grayThreshold)
-        // const thresholdedRed = applyThreshold(redChannel, redThreshold)
-        // const thresholdedGreen = applyThreshold(greenChannel, greenThreshold)
-        // const thresholdedBlue = applyThreshold(blueChannel, blueThreshold)
-
-        // const f_image = combineChannels(
-        //   thresholdedRed,
-        //   thresholdedGreen,
-        //   thresholdedBlue,
-        //   width,
-        //   height
-        // )
-
+          `Thresholds: {R:${redThreshold}, G:${greenThreshold}, B:${blueThreshold}}, Gr:${grayThreshold}`        
         const f_image = adjustImageWithThresholds(imageData, grayThreshold, {r:redThreshold, g:greenThreshold, b:blueThreshold})
-
         showCase(rootDiv.id, imageDataToDataUrl(f_image), 'Adjusted Image')
       }
 
