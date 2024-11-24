@@ -1,7 +1,8 @@
 # Tone Adjustment Using Otsu's Threshold in JavaScript
 
 This project adjusts the tone of an input image using **Otsu's threshold adjustment**. The algorithm calculates the difference between the grayscale threshold and individual RGB channel thresholds, applying the result to enhance the tonal balance of the image.
-
+## Live Demo
+- https://muhammedshahid.github.io/tone-adjustment/
 ## Key Features
 - **Image Upload**: Users can upload images for tone adjustment.
 - **Otsu's Threshold Calculation**: 
